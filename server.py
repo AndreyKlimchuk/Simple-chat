@@ -18,10 +18,10 @@ class   Chat_server:
         self.main_sock.bind((HOST, PORT))
         self.socket_list = [self.main_sock]
 
+    def run(self):
 
-    def run(self, max_connection_num=10):
-        
-        self.main_sock.listen(max_connection_num)
+        self.main_sock.listen(10)
+        print("I'm listening ...")
 
         while True:
 
@@ -31,44 +31,46 @@ class   Chat_server:
             for sock in readable:
 
                 if sock == self.main_sock:
-                    
+
+                    print("New incomming connection")
                     client_sock, addr = self.main_sock.accept()
                     self.socket_list.append(client_sock)
-                    host_name = socket.gethostbyaddr(addr[0])
-                    self.send_to_all(self.main_sock, f"{host_name} entered chat-room")
+                    self.send_to_all(self.main_sock, b"somebody entered chat-room")
 
                 else:
 
                     message = sock.recv(1024)
-                    
+
                     if not message:
-                        
+
                         if sock in self.socket_list:
+                            print("removed")
                             self.socket_list.remove(sock)
-                        self.send_to_all(self.main_sock, f"{sock} has gone offline")
-                    
+                        self.send_to_all(self.main_sock, b"somebody has gone offline")
+
                     else:
 
                         self.send_to_all(sock, message)
 
 
-    def send_to_all(sender, message):
+    def send_to_all(self, sender, message):
 
         for sock in self.socket_list:
 
             if sock != self.main_sock and sock != sender:
 
                 try:
-                    sock.sendall(sender + ':' + message)
+                    sock.send(message)
                 except:
-                    if sock in self.sock_list:
-                        self.sock_list.remove(sock)
+
+                    if sock in self.socket_list:
+                        self.socket_list.remove(sock)
 
 
 if __name__ == "__main__":
 
     server = Chat_server()
-    server.run(5)
+    server.run()
 
 
 
