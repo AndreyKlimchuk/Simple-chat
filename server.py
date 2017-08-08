@@ -17,6 +17,7 @@ class   Chat_server:
                                   socket.SO_REUSEADDR, 1)
         self.main_sock.bind((HOST, PORT))
         self.socket_list = [self.main_sock]
+        self.names = {self.main_sock:"SERVER"}
 
     def run(self):
 
@@ -32,10 +33,12 @@ class   Chat_server:
 
                 if sock == self.main_sock:
 
-                    print("New incomming connection")
                     client_sock, addr = self.main_sock.accept()
                     self.socket_list.append(client_sock)
-                    self.send_to_all(self.main_sock, b"somebody entered chat-room")
+                    name = client_sock.recv(20).decode("utf-8")
+                    self.names[client_sock] = name
+                    self.send_to_all(self.main_sock, f"[{self.names[self.main_sock]}]: "
+                                                     f"{name} entered chat-room")
 
                 else:
 
@@ -46,11 +49,13 @@ class   Chat_server:
                         if sock in self.socket_list:
                             print("removed")
                             self.socket_list.remove(sock)
-                        self.send_to_all(self.main_sock, b"somebody has gone offline")
+                        self.send_to_all(self.main_sock, f"[{self.names[self.main_sock]}]: "
+                                                         f"{self.names[sock]} has gone offline")
 
                     else:
 
-                        self.send_to_all(sock, message)
+                        data = '[' + self.names[sock] + ']: ' + message.decode("utf-8")
+                        self.send_to_all(sock, data)
 
 
     def send_to_all(self, sender, message):
@@ -60,7 +65,7 @@ class   Chat_server:
             if sock != self.main_sock and sock != sender:
 
                 try:
-                    sock.send(message)
+                    sock.send(message.encode("utf-8"))
                 except:
 
                     if sock in self.socket_list:
