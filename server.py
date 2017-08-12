@@ -1,81 +1,102 @@
 #!/usr/bin/env  python3.6
 
-import socket
+import socketserver
 import select
-import sys
 
 HOST = ''
 PORT = 28900
 
-class   Chat_server:
+class   SChatServer(socketserver.ThreadingTCPServer):
 
-    def __init__(self):
+    allow_reuse_address = True
 
-        self.main_sock = socket.socket(socket.AF_INET,
-                                       socket.SOCK_STREAM)
-        self.main_sock.setsockopt(socket.SOL_SOCKET,
-                                  socket.SO_REUSEADDR, 1)
-        self.main_sock.bind((HOST, PORT))
-        self.socket_list = [self.main_sock]
-        self.names = {self.main_sock:"SERVER"}
+    def __init__(self, server_adress, RequestHandlerClass):
+        """
+        Call TCPServer class constructor and create set to store
+        all new connections.
+        """
 
-    def run(self):
+        super().__init__(server_adress, RequestHandlerClass, True)
+        self.clients = set()
 
-        self.main_sock.listen(10)
-        print("I'm listening ...")
+    def add_client(self, client_socket):
+
+        self.clients.add(client_socket)
+
+    def remove_client(self, client_socket):
+
+        self.clients.remove(client_socket)
+
+    def broadcast(self, sender, data):
+        """
+        Encode message if it's not in binary format and send it to
+        all clients, except sender.
+        """
+
+        if type(data) is str:
+            data = data.encode("utf-8")
+        for client in self.clients:
+            if client is not sender:
+                client.sendall(data)
+
+class   NewClientHandler(socketserver.StreamRequestHandler):
+
+    def setup(self):
+        """
+        Get the client's nickname, which he sends immediately after
+        connection is established, save client's socket in set, and
+        notify other clients about new participant.
+        """
+
+        super().setup()
+        self.nickname = self.get_data().decode("utf-8")
+        self.server.add_client(self.request)
+        message = f"{self.nickname} entered chat-room!"
+        self.server.broadcast(self.request, message)
+
+    def handle(self):
+        """
+        Wait when client socket become readable in nonblocking manner,
+        get message, process and send it to other clients.
+        """
 
         while True:
-
-            readable, __, __ = \
-                select.select(self.socket_list, [], [], 0)
-
-            for sock in readable:
-
-                if sock == self.main_sock:
-
-                    client_sock, addr = self.main_sock.accept()
-                    self.socket_list.append(client_sock)
-                    name = client_sock.recv(20).decode("utf-8")
-                    self.names[client_sock] = name
-                    self.send_to_all(self.main_sock, f"[{self.names[self.main_sock]}]: "
-                                                     f"{name} entered chat-room")
-
-                else:
-
-                    message = sock.recv(1024)
-
-                    if not message:
-
-                        if sock in self.socket_list:
-                            print("removed")
-                            self.socket_list.remove(sock)
-                        self.send_to_all(self.main_sock, f"[{self.names[self.main_sock]}]: "
-                                                         f"{self.names[sock]} has gone offline")
-
-                    else:
-
-                        data = '[' + self.names[sock] + ']: ' + message.decode("utf-8")
-                        self.send_to_all(sock, data)
+            r, w, e = select.select((self.request,), [], [], 0)
+            if self.request in r:
+                data = self.get_data()
+                if not data:
+                    break
+                data = self.process_data(data)
+                self.server.broadcast(self.request, data)
 
 
-    def send_to_all(self, sender, message):
+    def finish(self):
+        """
+        Notify clients that participant left room and
+        removes his socket from set.
+        """
 
-        for sock in self.socket_list:
+        message = f"{self.nickname} left chat-room!"
+        self.server.broadcast(self.request, message)
+        self.server.remove_client(self.request)
+        super().finish()
 
-            if sock != self.main_sock and sock != sender:
+    def get_data(self):
 
-                try:
-                    sock.send(message.encode("utf-8"))
-                except:
+        return self.request.recv(4096)
 
-                    if sock in self.socket_list:
-                        self.socket_list.remove(sock)
+    def process_data(self, data):
+        """ Prepend message with nickname """
+
+        data = data.decode("utf-8")
+        data = '[' + self.nickname + ']: ' + data;
+        return data
 
 
 if __name__ == "__main__":
 
-    server = Chat_server()
-    server.run()
+    server = SChatServer((HOST, PORT), NewClientHandler)
+    server.serve_forever()
 
 
 
