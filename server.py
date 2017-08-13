@@ -2,9 +2,7 @@
 
 import socketserver
 import select
-
-HOST = ''
-PORT = 28900
+import argparse
 
 class   SChatServer(socketserver.ThreadingTCPServer):
 
@@ -12,7 +10,7 @@ class   SChatServer(socketserver.ThreadingTCPServer):
 
     def __init__(self, server_adress, RequestHandlerClass):
         """
-        Call TCPServer class constructor and create set to store
+        Call TCPServer class's constructor and create set to store
         all new connections.
         """
 
@@ -56,7 +54,7 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
 
     def handle(self):
         """
-        Wait when client socket become readable in nonblocking manner,
+        Wait when client's socket become readable in nonblocking manner,
         get message, process and send it to other clients.
         """
 
@@ -95,8 +93,13 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
 
 if __name__ == "__main__":
 
-    server = SChatServer((HOST, PORT), NewClientHandler)
+    parser = argparse.ArgumentParser("Simple-chat server")
+    parser.add_argument('-h', default='localhost', help='host to run server on')
+    parser.add_argument('-p', default=28900, type=int, help='port to run server on')
+    server_address = patser.parse_args()
+    server = SChatServer(server_address, NewClientHandler)
     server.serve_forever()
+
 
 
 
