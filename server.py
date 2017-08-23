@@ -92,7 +92,7 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simple-chat server", conflict_handler="resolve")
-    parser.add_argument('-h', default='localhost', help='host to run server on')
+    parser.add_argument('-h', default='', help='host to run server on')
     parser.add_argument('-p', default=28900, type=int, help='port to run server on')
     server_address = tuple(vars(parser.parse_args()).values())
     server = SChatServer(server_address, NewClientHandler)
