@@ -1,89 +1,145 @@
 #!/usr/bin/env python3.6
 
+from tkinter import *
+import argparse
 import select
 import socket
 import sys
 import os
 import re
 
-def     get_name():
+class   SChatClient:
 
-    with open(".s-chat.conf", "a+") as f:
-
-        f.seek(0)
-        m = re.search("\s*name\s*:\s*[^\s]+", f.read())
-
-        if not m:
-            print("Hi! Welcome to simple-chat!")
-
-            while True:
-
-                name = input("Tell me who you are: ")
-
-                if not name:
-                    continue
-                elif len(name) > 16:
-                    print("Please, enter shorter name! (maximum 12 symbols)")
-                else: 
-                    break
-
-            f.write("\nname: %s\n" % name)
-
-        else:
-
-            m = m.group(0)
-            name = m[m.index(':') + 1:].strip()[:12]
-
-    return name
-
-
-def client_run():
-
-    server_ip, port = sys.argv[1], 28900
-
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.settimeout(2)
-
-    try:
-        client_socket.connect((server_ip, port))
-    except:
-        print(f"Unable to connect to {server_ip}")
-        sys.exit()
-
-    client_socket.send(get_name().encode("utf-8"))
-
-    while True:
-
-        sockets = [sys.stdin, client_socket]
-        readable, __, __ = select.select(sockets, [], [])
-
-        for s in readable:
+    def __init__(self, server_address):
         
-            if s == client_socket:
-                message = s.recv(4096)
-            
-                if not message:
-                    print("Connection with server lost")
-                    sys.exit()
-                else:
-                    print(message.decode("utf-8"))
+        self.server_address = server_address
+        self.nickname = self.get_nickname()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect_server()
+        self.setup_gui()
 
-            elif s == sys.stdin:
-                message = sys.stdin.readline()[:-1]
-                if message:
-                    client_socket.send(message.encode("utf-8"))
 
+    def connect_server(self):
+
+        try:
+            self.socket.connect(self.server_address)
+        except:
+            print(f"Unable to connect to {self.server_address}")
+            self.finish()
+        self.socket.sendall(self.nickname.encode("utf-8"))
+
+
+    def setup_gui(self):
+
+        """ Main window """
+        self.root = Tk()
+        self.root.title('Simple-chat')
+        self.root.resizable(0, 0)
+        self.root.after(10, self.check_incoming) 
+
+        """ Log """
+        self.log = Text(self.root, width=50,  height=15, font=(30))
+        self.log.grid(row=0, column=0)
+        self.log.config(state=DISABLED)
+
+        """ Log scrollbar """
+        self.log_sb = Scrollbar(self.root)
+        self.log_sb.grid(row=0, column=1, sticky=NS)
+        self.log_sb['command'] = self.log.yview
+        self.log['yscrollcommand'] = self.log_sb.set
+
+        """ Message field """
+        self.msg = Text(self.root, width=50, height=4, font=(30))
+        self.msg.grid(row=1, column=0)
+        self.msg.bind('<Return>', self.send_message)
+        self.msg.focus_set()
+
+        """ Message scrollbar """
+        self.msg_sb = Scrollbar(self.root)
+        self.msg_sb.grid(row=1, column=1, sticky=NS)
+        self.msg_sb['command'] = self.msg.yview
+        self.msg['yscrollcommand'] = self.msg_sb.set
+
+
+    def run(self):
+
+        self.root.mainloop()
+
+
+    def check_incoming(self):
+
+        r, w, e = select.select((self.socket,), [], [], 0)
+        if self.socket in r:
+            self.receive_message()
+        self.root.after(10, self.check_incoming)
+
+
+    def send_message(self, event):
+
+        message = self.msg.get(1.0, END).strip()
+        if message:
+            self.display_message(f"[Me]: {message}\n")
+            self.socket.sendall(message.encode("utf-8"))
+        self.msg.delete(1.0, END)
+
+
+    def receive_message(self):
+
+        message = self.socket.recv(4096).decode("utf-8")
+        if not message:
+            self.finish()
+        else:
+            self.display_message(message + '\n')
+
+
+    def display_message(self, message):
+
+        self.log.config(state=NORMAL)
+        self.log.insert(END, message)
+        self.log.see(END)
+        self.log.config(state=DISABLED)
+
+
+    def get_nickname(self):
+
+        with open(".s-chat.conf", "a+") as f:
+            f.seek(0)
+            m = re.search("name\s*:\s*[^\s]+", f.read())
+            if not m:
+                name = self.ask_nickname(f)
+            else:
+                name = m.group(0).split(':', 1)[1].strip()[:12]
+        return name
+
+
+    def ask_nickname(self, conf_file):
+
+        print("Hi! Welcome to simple-chat!")
+        while True:
+            name = input("Tell me who you are: ")
+            if not name:
+                continue
+            elif len(name) > 16:
+                print("Please, enter shorter name! (max 12 symbols)")
+            else: 
+                break
+        conf_file.write(f"\nname: {name}\n")
+        return name
+
+
+    def finish(self):
+
+        self.socket.close()
+        os._exit(0)
 
 
 if __name__ == "__main__":
+ 
+    parser = argparse.ArgumentParser("Simple-chat server", conflict_handler="resolve")
+    parser.add_argument('-h', default='localhost', help='host to connect')
+    parser.add_argument('-p', default=28900, type=int, help='port to connect')
+    server_address = tuple(vars(parser.parse_args()).values())
 
-    if len(sys.argv) < 2:
-        print("usage: ./s-chat_client [server ip addr]")
-        sys.exit()
-
-    client_run()
-            
-
-
-
+    client = SChatClient(server_address)
+    client.run()
 
