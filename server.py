@@ -27,12 +27,10 @@ class   SChatServer(socketserver.ThreadingTCPServer):
 
     def broadcast(self, sender, data):
         """
-        Encode message if it's not in binary format and send it to
-        all clients, except sender.
+        Encode message and send it to all clients, except sender.
         """
 
-        if type(data) is str:
-            data = data.encode("utf-8")
+        data = data.encode("utf-8")
         for client in self.clients:
             if client is not sender:
                 client.sendall(data)
@@ -47,7 +45,7 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
         """
 
         super().setup()
-        self.nickname = self.get_data().decode("utf-8")
+        self.nickname = self.get_data()
         self.server.add_client(self.request)
         message = f"{self.nickname} entered chat-room!"
         self.server.broadcast(self.request, message)
@@ -67,7 +65,6 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
                 data = self.process_data(data)
                 self.server.broadcast(self.request, data)
 
-
     def finish(self):
         """
         Notify clients that participant left room and
@@ -81,12 +78,13 @@ class   NewClientHandler(socketserver.StreamRequestHandler):
 
     def get_data(self):
 
-        return self.request.recv(4096)
+        data = self.request.recv(4096)
+        data = data.decode("utf-8")
+        return data
 
     def process_data(self, data):
         """ Prepend message with nickname """
 
-        data = data.decode("utf-8")
         data = '[' + self.nickname + ']: ' + data;
         return data
 
